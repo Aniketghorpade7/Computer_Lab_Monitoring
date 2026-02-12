@@ -1,0 +1,5 @@
+#Following files should be ignored
+*.log
+*.secret
+.env
+server/nagios/private/resource.cfg

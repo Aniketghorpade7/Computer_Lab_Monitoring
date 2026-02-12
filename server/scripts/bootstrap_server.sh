@@ -13,7 +13,7 @@ TIMEZONE="UTC"
 apt-get update && apt-get upgrade -y
 
 #installing essential tools
-apt install curl wget git ufw software-properties-common build-essential
+apt install -y curl wget git ufw software-properties-common build-essential
 
 #Checking of existance of user in system 
 if ! getent passwd "$MONITOR_USER" > /dev/null; then
@@ -35,7 +35,7 @@ echo "Allowing OpenSSH for remote logging"
 sudo ufw allow OpenSSH
 
 echo "Allowing the required ports"
-for PORT in "$ALLOWED_PORTS"
+for PORT in "${ALLOWED_PORTS[@]}"
 do
     sudo ufw allow "$PORT"
 done
@@ -47,7 +47,6 @@ echo "Firewall status"
 sudo ufw status verbose
 
 #Setting up time zones
-
 echo "Setting up timezone to $TIMEZONE"
 sudo timedatectl set-timezone "$TIMEZONE"
 
@@ -62,3 +61,19 @@ timedatectl status
 
 echo "NTP status:"
 timedatectl show-timesync --all | head -n 15  
+
+#creating dedicated directories for nagios and prometheus
+echo "Creating directories for the essential services"
+
+# Creating dir for prometheus (config and database)
+sudo mkdir -p /etc/prometheus
+sudo mkdir -p /var/lib/prometheus
+
+# Creating dir for nagios (config)
+sudo mkdir -p /etc/nagios
+
+# Giving permissions to user
+sudo chown "$MONITOR_USER":"$MONITOR_USER" /var/lib/prometheus
+sudo chown "$MONITOR_USER":"$MONITOR_USER" /etc/prometheus
+
+echo "Directories created and permissions set."

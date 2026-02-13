@@ -34,6 +34,7 @@ cp -r consoles console_libraries /etc/prometheus/
 cp prometheus.yml /etc/prometheus/prometheus.yml
 
 # Ensure permissions are correct for our service user
+mkdir -p /var/lib/prometheus
 chown -R $USER:$USER /etc/prometheus
 chown -R $USER:$USER /var/lib/prometheus
 

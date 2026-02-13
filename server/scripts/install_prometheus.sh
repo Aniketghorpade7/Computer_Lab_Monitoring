@@ -1,7 +1,6 @@
 #! /bin/bash
 
 set -e  #if one command fails scripts stops (atomicity)
-
 set -x  #prints each command before excuting
 
 # Variables

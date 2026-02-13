@@ -21,7 +21,7 @@ sudo usermod -a -G nagcmd www-data
 
 #Installing the nagios core
 cd /tmp
-wget https://assets.nagios.com/downloads/nagioscore/releases/${NAGIOS_VER}.tar.gz
+wget https://assets.nagios.com/downloads/nagioscore/releases/nagios-${NAGIOS_VER}.tar.gz
 tar -xvf nagios-${NAGIOS_VER}.tar.gz
 cd nagios-${NAGIOS_VER}
 # Compile

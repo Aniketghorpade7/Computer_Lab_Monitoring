@@ -1,5 +1,10 @@
 #! /bin/bash
 
+if [[ $EUID -ne 0 ]]; then
+  echo "Run as root"
+  exit 1
+fi
+
 set -e  #if one command fails scripts stops (atomicity)
 set -x  #prints each command before excuting
 

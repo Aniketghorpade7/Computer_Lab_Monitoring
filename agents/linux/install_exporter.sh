@@ -1,6 +1,11 @@
 #!/bin/bash 
 # It tells the OS to use bash interpreter to run this file 
 
+if [[ $EUID -ne 0 ]]; then
+  echo "Run as root"
+  exit 1
+fi
+
 set -e
 #  "Exit on Error." If any command fails, the script stops immediately.
 # This prevents "cascading failures" where one error breaks everything that follows.
@@ -23,7 +28,7 @@ fi
 
 #---  User Management ---
 if ! id -u node_exporter >/dev/null 2>&1; then
-    sudo useradd --no-create-home --shell /bin/false node_exporter
+    useradd --no-create-home --shell /bin/false node_exporter
 fi
 # if node_exporter is not exist then create it.
 #  -- No home directory created -->> this is system user
@@ -52,15 +57,15 @@ tar -xvf "node_exporter-${VERSION}.${ARCH}.tar.gz"
 
 # Move the binary to a system path
 # This makes the command 'node_exporter' available everywhere
-sudo mv "node_exporter-${VERSION}.${ARCH}/node_exporter" /usr/local/bin/
+mv "node_exporter-${VERSION}.${ARCH}/node_exporter" /usr/local/bin/
 # move the actual executable binary to standard system path
 
 
-sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
+chown node_exporter:node_exporter /usr/local/bin/node_exporter
 # user ko hamne ownership dedi
 
 # so we are creating service file for node exporter 
-sudo tee /etc/systemd/system/node_exporter.service <<EOF
+tee /etc/systemd/system/node_exporter.service <<EOF
 [Unit]
 Description=Node Exporter
 After=network.target
@@ -96,11 +101,11 @@ EOF
 s
 
 
-sudo systemctl daemon-reload 
+systemctl daemon-reload 
 
-sudo systemctl enable node_exporter
+systemctl enable node_exporter
 
-sudo systemctl start node_exporter
+systemctl start node_exporter
 # Verify the agent is responding
 if curl -s localhost:9100/metrics | grep -q "node_cpu_seconds_total"; then
    echo "Verification Success: Node Exporter is emitting metrics."
@@ -115,6 +120,6 @@ rm -rf node_exporter-${VERSION}.${ARCH}*
 
 # Open the port for the Monitoring Server
 # Ideally, replace 'any' with your Central Server IP for better security
-sudo ufw allow from any to any port 9100 proto tcp
+ufw allow from any to any port 9100 proto tcp
 
 echo "Node Exporter installed and running!"

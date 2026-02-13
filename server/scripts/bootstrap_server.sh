@@ -35,7 +35,7 @@ echo "Reseting the firewall to clean state"
 ufw --force reset
 
 echo "Setting default policies"
-ufw default deny incomming
+ufw default deny incoming
 ufw default allow outgoing
 
 echo "Allowing OpenSSH for remote logging"

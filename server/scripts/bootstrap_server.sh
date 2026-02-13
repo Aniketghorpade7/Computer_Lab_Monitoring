@@ -1,4 +1,11 @@
 #!/bin/bash
+#!/bin/bash
+
+if [[ $EUID -ne 0 ]]; then
+   echo "Run as root"
+   exit 1
+fi
+
 
 set -e      #if one command fails scripts stops (atomicity)
 
@@ -10,49 +17,49 @@ ALLOWED_PORTS=("80" "22" "3000" "9090")
 TIMEZONE="UTC"
 
 #Update the system first 
-sudo apt-get update && apt-get upgrade -y
+apt-get update && apt-get upgrade -y
 
 #installing essential tools
-sudo apt install -y curl wget git ufw software-properties-common build-essential
+apt install -y curl wget git ufw software-properties-common build-essential
 
 #Checking of existance of user in system 
 if ! getent passwd "$MONITOR_USER" > /dev/null; then
     echo "User does not exist, creating......"
-    sudo useradd -m "$MONITOR_USER"
+    useradd -m "$MONITOR_USER"
 else
     echo "User exist :)"
 fi
 
 #Configuring the firewall
 echo "Reseting the firewall to clean state"
-sudo ufw --force reset
+ufw --force reset
 
 echo "Setting default policies"
-sudo ufw default deny incomming
-sudo ufw default allow outgoing
+ufw default deny incomming
+ufw default allow outgoing
 
 echo "Allowing OpenSSH for remote logging"
-sudo ufw allow OpenSSH
+ufw allow OpenSSH
 
 echo "Allowing the required ports"
 for PORT in "${ALLOWED_PORTS[@]}"
 do
-    sudo ufw allow "$PORT"
+    ufw allow "$PORT"
 done
 
 echo "Enabling the firewall"
-sudo ufw --force enable
+ufw --force enable
 
 echo "Firewall status"
-sudo ufw status verbose
+ufw status verbose
 
 #Setting up time zones
 echo "Setting up timezone to $TIMEZONE"
-sudo timedatectl set-timezone "$TIMEZONE"
+timedatectl set-timezone "$TIMEZONE"
 
-sudo systemctl enable systemd-timesyncd
-sudo systemctl start systemd-timesyncd
-sudo systemctl restart systemd-timesyncd
+systemctl enable systemd-timesyncd
+systemctl start systemd-timesyncd
+systemctl restart systemd-timesyncd
 
 sleep 3
 
@@ -66,14 +73,14 @@ timedatectl show-timesync --all | head -n 15
 echo "Creating directories for the essential services"
 
 # Creating dir for prometheus (config and database)
-sudo mkdir -p /etc/prometheus
-sudo mkdir -p /var/lib/prometheus
+mkdir -p /etc/prometheus
+mkdir -p /var/lib/prometheus
 
 # Creating dir for nagios (config)
-sudo mkdir -p /etc/nagios
+mkdir -p /etc/nagios
 
 # Giving permissions to user
-sudo chown "$MONITOR_USER":"$MONITOR_USER" /var/lib/prometheus
-sudo chown "$MONITOR_USER":"$MONITOR_USER" /etc/prometheus
+chown "$MONITOR_USER":"$MONITOR_USER" /var/lib/prometheus
+chown "$MONITOR_USER":"$MONITOR_USER" /etc/prometheus
 
 echo "Directories created and permissions set."

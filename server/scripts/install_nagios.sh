@@ -14,10 +14,33 @@ sudo apt-get update
 sudo apt-get install -y autoconf gcc libc6 make wget unzip apache2 php libapache2-mod-php libgd-dev
 
 # Creating the nagcmd group allows the web UI to interact with the engine
-sudo useradd nagios
-sudo groupadd nagcmd
-sudo usermod -a -G nagcmd nagios
-sudo usermod -a -G nagcmd www-data
+if id "nagios" &>/dev/null; then
+    echo "User nagios already exists. Skipping..."
+else
+    echo "Creating user nagios..."
+    sudo useradd nagios || { echo "Failed to create user"; exit 1; }
+fi
+# Create nagcmd group if it doesn't exist
+if getent group "nagcmd" > /dev/null; then
+    echo "Group nagcmd already exists. Skipping..."
+else
+    echo "Creating group nagcmd..."
+    sudo groupadd nagcmd || { echo "Failed to create group"; exit 1; }
+fi
+# Add nagios to nagcmd group if not already added
+if id -nG "nagios" | grep -qw "nagcmd"; then
+    echo "nagios already in nagcmd group. Skipping..."
+else
+    echo "Adding nagios to nagcmd group..."
+    sudo usermod -a -G nagcmd nagios || { echo "Failed to modify nagios"; exit 1; }
+fi
+# Add www-data to nagcmd group if not already added
+if id -nG "www-data" | grep -qw "nagcmd"; then
+    echo "www-data already in nagcmd group. Skipping..."
+else
+    echo "Adding www-data to nagcmd group..."
+    sudo usermod -a -G nagcmd www-data || { echo "Failed to modify www-data"; exit 1; }
+fi
 
 #Installing the nagios core
 cd /tmp

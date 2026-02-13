@@ -10,10 +10,10 @@ ALLOWED_PORTS=("80" "22" "3000" "9090")
 TIMEZONE="UTC"
 
 #Update the system first 
-apt-get update && apt-get upgrade -y
+sudo apt-get update && apt-get upgrade -y
 
 #installing essential tools
-apt install -y curl wget git ufw software-properties-common build-essential
+sudo apt install -y curl wget git ufw software-properties-common build-essential
 
 #Checking of existance of user in system 
 if ! getent passwd "$MONITOR_USER" > /dev/null; then

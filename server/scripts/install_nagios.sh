@@ -11,7 +11,7 @@ HTPASSWD_FILE="/usr/local/nagios/etc/htpasswd.users"
 
 #Installing the dependancies
 sudo apt-get update
-sudo apt-get install -y autoconf gcc libc6 make wget unzip apache2 php libapache2-mod-php libgd-dev
+sudo apt-get install -y autoconf gcc libc6 make wget unzip apache2 php libapache2-mod-php libgd-dev libssl-dev
 
 # Creating the nagcmd group allows the web UI to interact with the engine
 if id "nagios" &>/dev/null; then

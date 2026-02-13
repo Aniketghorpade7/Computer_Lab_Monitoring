@@ -8,7 +8,15 @@ set -e
 
 # Variables
 VERSION="1.7.0"
-ARCH="linux-amd64" 
+# Detect Architecture
+OS_ARCH=$(uname -m)
+if [ "$OS_ARCH" = "x86_64" ]; then
+    ARCH="linux-amd64"
+elif [ "$OS_ARCH" = "aarch64" ]; then
+    ARCH="linux-arm64"
+else
+    ARCH="linux-386"
+fi
 #We define variables so we don't have to type the version number multiple times. 
 # It makes updating the script in the future much easier.
 
@@ -93,8 +101,20 @@ sudo systemctl daemon-reload
 sudo systemctl enable node_exporter
 
 sudo systemctl start node_exporter
+# Verify the agent is responding
+if curl -s localhost:9100/metrics | grep -q "node_cpu_seconds_total"; then
+   echo "Verification Success: Node Exporter is emitting metrics."
+else
+   echo "Verification Failed: Service is running but metrics are unreachable."
+   exit 1
+fi
 
 # Clean the mess
 rm -rf node_exporter-${VERSION}.${ARCH}*
+
+
+# Open the port for the Monitoring Server
+# Ideally, replace 'any' with your Central Server IP for better security
+sudo ufw allow from any to any port 9100 proto tcp
 
 echo "Node Exporter installed and running!"

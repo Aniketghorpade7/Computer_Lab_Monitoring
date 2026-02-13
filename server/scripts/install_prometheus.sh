@@ -24,21 +24,22 @@ tar xvf "prometheus-${VERSION}.linux-amd64.tar.gz"
 cd "prometheus-${VERSION}.linux-amd64"
 
 # Moving to /usr/local/bin ensures they are in the system PATH
-sudo mv prometheus promtool /usr/local/bin/
-sudo chown $USER:$USER /usr/local/bin/prometheus
-sudo chown $USER:$USER /usr/local/bin/promtool
+mv prometheus promtool /usr/local/bin/
+chown $USER:$USER /usr/local/bin/prometheus
+chown $USER:$USER /usr/local/bin/promtool
 
 # Prometheus comes with console libraries and a sample config
-sudo cp -r consoles console_libraries /etc/prometheus/
-sudo cp prometheus.yml /etc/prometheus/prometheus.yml
+mkdir -p /etc/prometheus
+cp -r consoles console_libraries /etc/prometheus/
+cp prometheus.yml /etc/prometheus/prometheus.yml
 
 # Ensure permissions are correct for our service user
-sudo chown -R $USER:$USER /etc/prometheus
-sudo chown -R $USER:$USER /var/lib/prometheus
+chown -R $USER:$USER /etc/prometheus
+chown -R $USER:$USER /var/lib/prometheus
 
 # 7. Create the Systemd Service File
 # This is a "Here Document" that writes the service configuration
-cat <<EOF | sudo tee /etc/systemd/system/prometheus.service
+cat <<EOF |  tee /etc/systemd/system/prometheus.service
 [Unit]
 Description=Prometheus Monitoring Engine
 Wants=network-online.target
@@ -62,9 +63,9 @@ WantedBy=multi-user.target
 EOF
 
 # 8. Reload and Start
-sudo systemctl daemon-reload
-sudo systemctl enable prometheus
-sudo systemctl start prometheus
+ systemctl daemon-reload
+ systemctl enable prometheus
+ systemctl start prometheus
 
 # 9. Cleanup
 rm -rf $TMP_DIR

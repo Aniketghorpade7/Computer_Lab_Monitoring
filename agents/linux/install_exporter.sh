@@ -16,6 +16,13 @@ else
     ARCH="linux-386"
 fi
 
+#--- Install Prerequisites ---
+echo "Installing prereuisties
+(curl)..."
+sudo apt-get update
+sudo apt-get install -y curl
+
+
 # Define explicit paths in /tmp to avoid permission issues in project folders
 DOWNLOAD_PATH="/tmp/node_exporter-${VERSION}.${ARCH}.tar.gz"
 EXTRACT_DIR="/tmp/node_exporter-${VERSION}.${ARCH}"

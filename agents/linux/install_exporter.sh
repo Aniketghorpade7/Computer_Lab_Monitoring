@@ -1,19 +1,12 @@
 #!/bin/bash 
-# It tells the OS to use bash interpreter to run this file 
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Run as root"
-  exit 1
-fi
 
 set -e
-#  "Exit on Error." If any command fails, the script stops immediately.
-# This prevents "cascading failures" where one error breaks everything that follows.
+# Exit on Error. Stops the script if any command fails.
 
-
-# Variables
+# --- Variables ---
 VERSION="1.7.0"
-# Detect Architecture
+
+# Detect Architecture automatically
 OS_ARCH=$(uname -m)
 if [ "$OS_ARCH" = "x86_64" ]; then
     ARCH="linux-amd64"
@@ -22,50 +15,37 @@ elif [ "$OS_ARCH" = "aarch64" ]; then
 else
     ARCH="linux-386"
 fi
-#We define variables so we don't have to type the version number multiple times. 
-# It makes updating the script in the future much easier.
 
+# Define explicit paths in /tmp to avoid permission issues in project folders
+DOWNLOAD_PATH="/tmp/node_exporter-${VERSION}.${ARCH}.tar.gz"
+EXTRACT_DIR="/tmp/node_exporter-${VERSION}.${ARCH}"
 
-#---  User Management ---
+# --- User Management ---
 if ! id -u node_exporter >/dev/null 2>&1; then
-    useradd --no-create-home --shell /bin/false node_exporter
+    echo "Creating node_exporter system user..."
+    sudo useradd --no-create-home --shell /bin/false node_exporter
 fi
-# if node_exporter is not exist then create it.
-#  -- No home directory created -->> this is system user
-
-
-
 
 # --- Download & Extract ---
-cd /tmp
-# Move to the temporary folder so we don't clutter the system.
-# Lines 10-12: This is an "Idempotent" check. It asks "Does user node_exporter exist?"
+echo "Cleaning up old temporary files..."
+sudo rm -f "$DOWNLOAD_PATH"
+sudo rm -rf "$EXTRACT_DIR"
 
+echo "Downloading Node Exporter v${VERSION} to $DOWNLOAD_PATH..."
+# Using sudo with curl to ensure write access to /tmp
+sudo curl -L "https://github.com/prometheus/node_exporter/releases/download/v${VERSION}/node_exporter-${VERSION}.${ARCH}.tar.gz" -o "$DOWNLOAD_PATH"
 
-#  Download using curl
-# We download from the official GitHub releases
-curl -LO "https://github.com/prometheus/node_exporter/releases/download/v${VERSION}/node_exporter-${VERSION}.${ARCH}.tar.gz"
+echo "Extracting archive to /tmp..."
+sudo tar -xvf "$DOWNLOAD_PATH" -C /tmp/
 
-# curl -->> fetches the binary from Github
+# --- Installation ---
+echo "Moving binary to /usr/local/bin..."
+sudo mv "$EXTRACT_DIR/node_exporter" /usr/local/bin/
+sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
 
-
-# Extract the contents
-tar -xvf "node_exporter-${VERSION}.${ARCH}.tar.gz"
-# tar extracts the downloaded archive
-
-
-
-# Move the binary to a system path
-# This makes the command 'node_exporter' available everywhere
-mv "node_exporter-${VERSION}.${ARCH}/node_exporter" /usr/local/bin/
-# move the actual executable binary to standard system path
-
-
-chown node_exporter:node_exporter /usr/local/bin/node_exporter
-# user ko hamne ownership dedi
-
-# so we are creating service file for node exporter 
-tee /etc/systemd/system/node_exporter.service <<EOF
+# --- Systemd Service Creation ---
+echo "Creating systemd service..."
+sudo tee /etc/systemd/system/node_exporter.service <<EOF
 [Unit]
 Description=Node Exporter
 After=network.target
@@ -81,45 +61,33 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-#This is a "Here Document." It writes the text between '<<EOF' and 'EOF' 
-# into the file /etc/systemd/system/node_exporter.service.
-# After=network.target: Don't start until the internet is ready.
-# ExecStart: The path to the file we just moved.
-# Restart=always: If the program crashes, the OS will automatically bring it back.
+# --- Start Service ---
+echo "Reloading systemd and starting service..."
+sudo systemctl daemon-reload 
+sudo systemctl enable node_exporter
+sudo systemctl start node_exporter
 
+# --- Verification ---
+echo "Verifying service metrics..."
+sleep 2 # Give the service a second to bind to the port
 
-
-
-
-
-
-
-
-
-
-
-s
-
-
-systemctl daemon-reload 
-
-systemctl enable node_exporter
-
-systemctl start node_exporter
-# Verify the agent is responding
 if curl -s localhost:9100/metrics | grep -q "node_cpu_seconds_total"; then
-   echo "Verification Success: Node Exporter is emitting metrics."
+   echo "------------------------------------------------"
+   echo "Verification Success: Node Exporter is ONLINE!"
+   echo "------------------------------------------------"
 else
    echo "Verification Failed: Service is running but metrics are unreachable."
    exit 1
 fi
 
-# Clean the mess
-rm -rf node_exporter-${VERSION}.${ARCH}*
+# --- Firewall ---
+if command -v ufw > /dev/null; then
+    echo "Updating UFW firewall rules..."
+    sudo ufw allow 9100/tcp
+fi
 
+# --- Cleanup ---
+sudo rm -rf "$EXTRACT_DIR"
+sudo rm -f "$DOWNLOAD_PATH"
 
-# Open the port for the Monitoring Server
-# Ideally, replace 'any' with your Central Server IP for better security
-ufw allow from any to any port 9100 proto tcp
-
-echo "Node Exporter installed and running!"
+echo "Installation complete!"

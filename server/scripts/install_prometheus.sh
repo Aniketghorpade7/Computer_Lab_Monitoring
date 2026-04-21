@@ -13,6 +13,9 @@ VERSION="2.50.1"
 USER="monitor_admin"
 TMP_DIR="/tmp/prometheus_install"
 
+#Adds the user 
+useradd --system --no-create-home --shell /bin/false $USER
+
 mkdir -p $TMP_DIR
 cd $TMP_DIR
 

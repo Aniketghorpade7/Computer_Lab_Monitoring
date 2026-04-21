@@ -16,7 +16,6 @@ TMP_DIR="/tmp/prometheus_install"
 # 1. Check and Create the System User
 if id "$USER" &>/dev/null; then
     echo "Error: User '$USER' already exists. Aborting installation to prevent conflicts."
-    exit 1
 else
     echo "User '$USER' does not exist. Creating it now..."
     useradd --system --no-create-home --shell /bin/false "$USER"

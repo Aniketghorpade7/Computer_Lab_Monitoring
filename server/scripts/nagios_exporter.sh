@@ -52,8 +52,7 @@ ARCHIVE_NAME=$(basename "$DOWNLOAD_URL")
 tar -xf "$ARCHIVE_NAME"
 
 # 7. Find and install binary
-BINARY_PATH=$(find . -type f -name "prometheus-nagios-exporter" | head -n 1)
-
+BINARY_PATH=$(find . -type f -executable | grep -E "nagios.*exporter" | head -n 1)
 if [[ -z "$BINARY_PATH" ]]; then
   echo "Binary not found in archive"
   exit 1

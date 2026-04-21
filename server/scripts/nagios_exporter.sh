@@ -1,93 +1,71 @@
-#! /bin/bash
+#!/usr/bin/env bash
 
+set -euo pipefail
+set -x
+
+USER="monitor_admin"
+TMP_DIR="/tmp/nagios_exporter_install"
+PROM_CONF="/etc/prometheus/prometheus.yml"
+SERVICE_FILE="/etc/systemd/system/nagios_exporter.service"
+
+# 1. Root check
 if [[ $EUID -ne 0 ]]; then
   echo "Run as root"
   exit 1
 fi
 
-set -e
-set -x
-
-USER="monitor_admin"
-INSTALL_DIR="/opt/nagios_exporter"
-PROM_CONF="/etc/prometheus/prometheus.yml"
-NAGIOS_STATUS_FILE="/usr/local/nagios/var/status.dat"
-
-# 1. Sanity Check
-if [ ! -f "$PROM_CONF" ]; then
-    echo "Error: $PROM_CONF not found!"
-    exit 1
+# 2. Prometheus config check
+if [[ ! -f "$PROM_CONF" ]]; then
+  echo "Error: $PROM_CONF not found! Install Prometheus first."
+  exit 1
 fi
 
-# 2. Check and Create the System User
+# 3. Create system user if not exists
 if id "$USER" &>/dev/null; then
-    echo "User '$USER' exists."
+  echo "User exists"
 else
-    useradd --system --no-create-home --shell /bin/false "$USER"
+  useradd --system --no-create-home --shell /usr/sbin/nologin "$USER"
 fi
 
-# 3. Setup Python Virtual Environment
-mkdir -p $INSTALL_DIR
-cd $INSTALL_DIR
-python3 -m venv venv
-source venv/bin/activate
-pip install prometheus_client
+# 4. Prepare temp directory
+rm -rf "$TMP_DIR"
+mkdir -p "$TMP_DIR"
+cd "$TMP_DIR"
 
-# 4. Write the Python Parser Script
-cat << 'EOF' > $INSTALL_DIR/nagios_exporter.py
-import time
-import re
-from prometheus_client import start_http_server, Gauge
+# 5. Fetch latest release dynamically
+echo "Fetching latest Nagios exporter release..."
+DOWNLOAD_URL=$(curl -s https://api.github.com/repos/linode-obs/nagios_exporter/releases/latest \
+  | grep browser_download_url \
+  | grep -E "linux.*amd64|Linux_x86_64" \
+  | cut -d '"' -f 4 \
+  | head -n 1)
 
-# Define our Prometheus metrics
-host_status = Gauge('nagios_host_status', 'Host status (0=UP, 1=DOWN)', ['host'])
-service_status = Gauge('nagios_service_status', 'Service status (0=OK, 1=WARN, 2=CRIT, 3=UNK)', ['host', 'service'])
+if [[ -z "$DOWNLOAD_URL" ]]; then
+  echo "Failed to fetch download URL"
+  exit 1
+fi
 
-STATUS_FILE = "/usr/local/nagios/var/status.dat"
+wget -q --show-progress "$DOWNLOAD_URL"
 
-def parse_status():
-    try:
-        with open(STATUS_FILE, 'r') as f:
-            content = f.read()
-        
-        # Parse Host blocks
-        host_blocks = re.findall(r'hoststatus \{([\s\S]*?)\}', content)
-        for block in host_blocks:
-            host_match = re.search(r'host_name=(.*)', block)
-            state_match = re.search(r'current_state=(\d)', block)
-            if host_match and state_match:
-                host_status.labels(host=host_match.group(1).strip()).set(int(state_match.group(1)))
-        
-        # Parse Service blocks
-        service_blocks = re.findall(r'servicestatus \{([\s\S]*?)\}', content)
-        for block in service_blocks:
-            host_match = re.search(r'host_name=(.*)', block)
-            service_match = re.search(r'service_description=(.*)', block)
-            state_match = re.search(r'current_state=(\d)', block)
-            if host_match and service_match and state_match:
-                service_status.labels(
-                    host=host_match.group(1).strip(), 
-                    service=service_match.group(1).strip()
-                ).set(int(state_match.group(1)))
+# 6. Extract archive
+ARCHIVE_NAME=$(basename "$DOWNLOAD_URL")
+tar -xf "$ARCHIVE_NAME"
 
-    except Exception as e:
-        print(f"Error reading status.dat: {e}")
+# 7. Find and install binary
+BINARY_PATH=$(find . -type f -name "prometheus-nagios-exporter" | head -n 1)
 
-if __name__ == '__main__':
-    # Expose metrics on port 9115
-    start_http_server(9115)
-    print("Custom Nagios Exporter running on port 9115...")
-    while True:
-        parse_status()
-        time.sleep(15) # Parse every 15 seconds
-EOF
+if [[ -z "$BINARY_PATH" ]]; then
+  echo "Binary not found in archive"
+  exit 1
+fi
 
-chown -R $USER:$USER $INSTALL_DIR
+install -m 0755 "$BINARY_PATH" /usr/local/bin/prometheus-nagios-exporter
+chown "$USER:$USER" /usr/local/bin/prometheus-nagios-exporter
 
-# 5. Create Systemd Service
-cat <<EOF | tee /etc/systemd/system/nagios_exporter.service
+# 8. Create systemd service
+cat <<EOF > "$SERVICE_FILE"
 [Unit]
-Description=Custom Python Nagios Exporter
+Description=Nagios Exporter for Prometheus
 Wants=network-online.target
 After=network-online.target
 
@@ -95,9 +73,9 @@ After=network-online.target
 User=$USER
 Group=$USER
 Type=simple
-WorkingDirectory=$INSTALL_DIR
-# We call the python executable directly from the venv
-ExecStart=$INSTALL_DIR/venv/bin/python $INSTALL_DIR/nagios_exporter.py
+ExecStart=/usr/local/bin/prometheus-nagios-exporter \\
+  --nagios.stats_binary=/usr/local/nagios/bin/nagiostats \\
+  --nagios.config_path=/usr/local/nagios/etc/nagios.cfg
 
 Restart=always
 
@@ -105,23 +83,32 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-# 6. Connect to Prometheus
-if grep -q "job_name: 'nagios'" "$PROM_CONF"; then
-    echo "Nagios job already exists."
-else
-    cat <<EOF >> "$PROM_CONF"
+# 9. Update Prometheus config safely
+if ! grep -q "job_name: 'nagios'" "$PROM_CONF"; then
+  echo "Adding Nagios job to Prometheus config..."
+
+  cat <<EOF >> "$PROM_CONF"
 
   - job_name: 'nagios'
     static_configs:
-      - targets: ['localhost:9115']
+      - targets: ['localhost:9927']
 EOF
+else
+  echo "Prometheus job already exists"
 fi
 
-# 7. Reload and Start
+# 10. Reload and start services
+systemctl daemon-reexec
 systemctl daemon-reload
+
 systemctl enable nagios_exporter
-systemctl start nagios_exporter
+systemctl restart nagios_exporter
 systemctl restart prometheus
 
-echo "Python Nagios Exporter Successfully Installed!"
+# 11. Cleanup
+rm -rf "$TMP_DIR"
+
+# 12. Status
 systemctl status nagios_exporter --no-pager
+
+echo "Nagios Exporter installation completed successfully"

@@ -5,23 +5,22 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-set -e  # If one command fails, script stops (atomicity)
+set -e  # If one command fails, script stops
 set -x  # Prints each command before executing
 
-# Variables
-NAGIOS_EXP_VERSION="0.8.0" 
+# Using the correct community exporter from Linode
+NAGIOS_EXP_VERSION="1.2.2" 
 USER="monitor_admin"
 TMP_DIR="/tmp/nagios_exporter_install"
 PROM_CONF="/etc/prometheus/prometheus.yml"
-NAGIOS_STATUS_FILE="/usr/local/nagios/var/status.dat"
 
-# 1. Sanity Check: Ensure Prometheus is actually installed first
+# 1. Sanity Check
 if [ ! -f "$PROM_CONF" ]; then
     echo "Error: $PROM_CONF not found! Please run your Prometheus install script first."
     exit 1
 fi
 
-# 2. Check and Create the System User (Skips if already created by Prometheus script)
+# 2. User Check
 if id "$USER" &>/dev/null; then
     echo "User '$USER' already exists. Skipping creation."
 else
@@ -29,18 +28,25 @@ else
     useradd --system --no-create-home --shell /bin/false "$USER"
 fi
 
+# Clean up any failed previous attempts
+rm -rf $TMP_DIR
 mkdir -p $TMP_DIR
 cd $TMP_DIR
 
-# 3. Download & Extract Nagios Exporter
-wget -c "https://github.com/prometheus/nagios_exporter/releases/download/v${NAGIOS_EXP_VERSION}/nagios_exporter-${NAGIOS_EXP_VERSION}.linux-amd64.tar.gz"
-tar xvf "nagios_exporter-${NAGIOS_EXP_VERSION}.linux-amd64.tar.gz"
+# 3. Download from the correct valid repository
+wget -c "https://github.com/linode-obs/nagios_exporter/releases/download/v${NAGIOS_EXP_VERSION}/nagios_exporter_${NAGIOS_EXP_VERSION}_Linux_x86_64.tar.gz"
 
-# 4. Move Binary to PATH and Set Permissions
-mv "nagios_exporter-${NAGIOS_EXP_VERSION}.linux-amd64/nagios_exporter" /usr/local/bin/
-chown $USER:$USER /usr/local/bin/nagios_exporter
+# 4. Extract safely into a subfolder
+mkdir -p extract_folder
+tar xvf "nagios_exporter_${NAGIOS_EXP_VERSION}_Linux_x86_64.tar.gz" -C extract_folder
 
-# 5. Create Nagios Exporter Systemd Service
+# 5. Move the binary (Named 'prometheus-nagios-exporter' by Linode)
+find extract_folder -type f -name "prometheus-nagios-exporter" -exec mv {} /usr/local/bin/ \;
+chown $USER:$USER /usr/local/bin/prometheus-nagios-exporter
+chmod +x /usr/local/bin/prometheus-nagios-exporter
+
+# 6. Create Nagios Exporter Systemd Service
+# NOTE: Ensure the paths to nagiostats and nagios.cfg match your Nagios server!
 cat <<EOF | tee /etc/systemd/system/nagios_exporter.service
 [Unit]
 Description=Nagios Exporter for Prometheus
@@ -51,8 +57,9 @@ After=network-online.target
 User=$USER
 Group=$USER
 Type=simple
-ExecStart=/usr/local/bin/nagios_exporter \
-    --nagios.status-file=${NAGIOS_STATUS_FILE}
+ExecStart=/usr/local/bin/prometheus-nagios-exporter \\
+    --nagios.stats_binary=/usr/local/nagios/bin/nagiostats \\
+    --nagios.config_path=/usr/local/nagios/etc/nagios.cfg
 
 Restart=always
 
@@ -60,8 +67,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-# 6. Connect Nagios to Prometheus (Append to prometheus.yml safely)
-# This checks if the job already exists so it doesn't duplicate lines if you run the script twice
+# 7. Connect Nagios to Prometheus (Linode exporter uses port 9927)
 if grep -q "job_name: 'nagios'" "$PROM_CONF"; then
     echo "Nagios job already exists in prometheus.yml. Skipping append."
 else
@@ -70,21 +76,17 @@ else
 
   - job_name: 'nagios'
     static_configs:
-      - targets: ['localhost:9115']
+      - targets: ['localhost:9927']
 EOF
 fi
 
-# 7. Reload Daemons and Start/Restart Services
+# 8. Reload Daemons and Start Services
 systemctl daemon-reload
-
-# Enable and start the new exporter
 systemctl enable nagios_exporter
 systemctl start nagios_exporter
-
-# Restart Prometheus so it reads the newly appended scrape job configuration
 systemctl restart prometheus
 
-# 8. Cleanup
+# 9. Cleanup
 rm -rf $TMP_DIR
 
 echo "Nagios Exporter Installation & Prometheus Connection Complete!"

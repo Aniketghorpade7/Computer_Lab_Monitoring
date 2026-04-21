@@ -79,5 +79,5 @@ EOF
 # 9. Cleanup
 rm -rf $TMP_DIR
 
-echo "Prometheus Installation Complete!"
 systemctl status prometheus --no-pager
+echo "Prometheus Installation Complete!"
